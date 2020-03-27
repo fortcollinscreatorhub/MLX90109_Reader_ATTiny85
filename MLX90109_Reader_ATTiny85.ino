@@ -19,15 +19,18 @@
 #define PRESENT_PIN 0
 #define OUT_DATA_TX_PIN 1
 
-#define READ_TIMEOUT 10000
+#define GOOD_READ_COUNT 3
+#define READ_TIMEOUT 100000
 
 #define SOFTS
 
 volatile bool edge_found = false;
 volatile byte indata = 0;
 
-long valid_count = 0;
+byte valid_count = 0;
 bool valid_read = false;
+unsigned long valid_data = 0;;
+long timeout_count = 0;
 
 bool pt_header_found = false;
 byte pt_header_count = 0;
@@ -73,6 +76,8 @@ void setup() {
 
   valid_count = 0;
   valid_read = false;
+  valid_data = 0;
+  timeout_count = 0;
 
   GIMSK = 0b00100000; // turn on pin change interrupts
   PCMSK = IN_CLK_MASK; // turn on interrupts on clock pin
@@ -143,6 +148,7 @@ void process_bit (byte data) {
         pt_version = 0;
         pt_data = 0;
         pt_bad = false;
+
         //digitalWrite(PRESENT_PIN, 1);
       }
     } else {
@@ -190,17 +196,29 @@ void process_bit (byte data) {
           //
           RFID_version = pt_version;
           RFID_data = pt_data;
-          valid_count = READ_TIMEOUT;
-          digitalWrite (PRESENT_PIN, 1);
+          
           nt_header_found = false;
           nt_header_count = 0;
           //
           // serial write of data
           //
           if (!valid_read) {
-            send_data (RFID_version, RFID_data);
+            if (valid_data != RFID_data) {
+              valid_data = RFID_data;
+              valid_count = 0;
+            } else {
+              valid_count++;
+              if (valid_count == GOOD_READ_COUNT) {
+                valid_read = true;
+                timeout_count = READ_TIMEOUT;
+                valid_count = 0;
+                digitalWrite (PRESENT_PIN, 1);
+                send_data (RFID_version, RFID_data);
+              }
+            }
+          } else {
+            timeout_count = READ_TIMEOUT;
           }
-          valid_read = true;
         }
 
         // now look for the next header....
@@ -230,6 +248,7 @@ void process_bit (byte data) {
         nt_version = 0;
         nt_data = 0;
         nt_bad = false;
+
       }
     } else {
       nt_header_found = false;
@@ -272,17 +291,29 @@ void process_bit (byte data) {
           //
           RFID_version = nt_version;
           RFID_data = nt_data;
-          valid_count = READ_TIMEOUT;
-          digitalWrite (PRESENT_PIN, 1);
+          
           pt_header_found = false;
           pt_header_count = 0;
           //
           // serial write of data
           //
           if (!valid_read) {
-            send_data (RFID_version, RFID_data);
+            if (valid_data != RFID_data) {
+              valid_data = RFID_data;
+              valid_count = 0;
+            } else {
+              valid_count++;
+              if (valid_count == GOOD_READ_COUNT) {
+                valid_read = true;
+                timeout_count = READ_TIMEOUT;
+                valid_count = 0;
+                digitalWrite (PRESENT_PIN, 1);
+                send_data (RFID_version, RFID_data);
+              }
+            }
+          } else {
+            timeout_count = READ_TIMEOUT;
           }
-          valid_read = true;
         }
 
         // now look for the next header....
@@ -305,10 +336,9 @@ void loop() {
   // will time out after TIMEOUT*10 microseconds
   //
   if (valid_read) {
-    if (valid_count > 0) {
-      valid_count--;
-    }
-    if (valid_count == 0) {
+    if (timeout_count != 0) {
+      timeout_count--;
+    } else {
       valid_read = false;
       digitalWrite (PRESENT_PIN, 0);
     }
