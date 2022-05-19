@@ -71,6 +71,13 @@ void setup() {
   digitalWrite (PRESENT_PIN, 0);
   digitalWrite (OUT_DATA_TX_PIN, 0);
 
+  for (int i=0; i<3; i++) {
+    digitalWrite (PRESENT_PIN, 1);
+    delay(250);
+    digitalWrite (PRESENT_PIN, 0);
+    delay(250);
+  }
+
   edge_found = false;
   indata = 0;
 
